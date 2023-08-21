@@ -29,7 +29,7 @@ def display_speed(screen, color, rect, s, font, size = 74, visible = True):
 def draw_needle(screen, color, rect, radius, theta):
     N = 20
     for i in range(N):
-        r = 0.7 * radius * math.pow((N-i) / N, 1.3)
+        r = 0.7 * radius * math.pow((N-i) / N, 1.1)
 
         cx, cy = rect.centerx, rect.centery
         end_x = cx + r * math.cos(theta)
@@ -44,7 +44,7 @@ def draw_arc_text(screen, color, rect, font, input_len, input_start, increment, 
     input_end = input_start + input_len
     for i in range(input_start, input_end, increment):
         font.origin = True
-        text, text_rect = font.render( str(i), color, size = 24 )
+        text, text_rect = font.render( str(i), color, size = 26 )
 
         angle = ((i - input_start) / input_len) * output_len
         angle = ((output_start - angle) * 2*math.pi)
@@ -105,6 +105,7 @@ def main():
 
     gauge_offset = 1.3
     gauge_width = gauge_offset * gauge_radius
+    dial_radius_pct = 0.08
 
     left = width - ((width - gauge_width)/2)
     speed_rect.center = (left, height//2)
@@ -212,6 +213,7 @@ def main():
         draw_arc_lines(screen, blue, tach_rect, tach_display_len, tach_angle_len, tach_start, 6)
 
         draw_needle(screen, red, tach_rect, tach_radius, theta)
+        pygame.draw.circle(screen, black, tach_rect.center, dial_radius_pct * tach_radius)
 
         tach_color = d_green if time_mode else pink
         tach_text = \
@@ -261,6 +263,7 @@ def main():
         draw_arc_lines(screen, blue, speed_rect, speed_len, speed_angle_len, speed_start)
 
         draw_needle(screen, red, speed_rect, speed_radius, theta)
+        pygame.draw.circle(screen, black, speed_rect.center, dial_radius_pct * speed_radius)
         speed_color = green if time_mode else l_pink
         display_speed(screen, speed_color, speed_rect, str(int(speed)), font)
 
