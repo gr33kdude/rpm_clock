@@ -1,20 +1,44 @@
 #!/usr/bin/env python3
 
+from collections import namedtuple
+import sys
 import pygame
 import pygame.freetype
 import datetime as dt
 import math
 
-# need to know what time it is
+# BUGS:
+# - cap_gauges doesn't quite work right with `eps` the way I want it
 
-# show the display
-# tachometer on the left side for RPM / hour
-# big speedometer in the center
-# fuel gauge shows the battery percentage
+# TODO:
+# - fuel gauge shows the battery percentage
+# - on hour transition, minute dial sweep anti-clockwise
+# -- "dial sweep" test pattern
+# - find some useful way to make the tachometer more dynamic
+# -- maybe count up the minute using revs?
+# count every 10 seconds using 5 gears (2 sec each)
 
-# find a way to draw the clock
-# draw each subcomponent
-# done
+def cap_gauges(tach, tach_range, speed, speed_range, strict = True):
+    eps = 1 if strict else sys.float_info.epsilon
+
+    min_tach,  max_tach  = tach_range
+    min_speed, max_speed = speed_range
+
+    cap = lambda x, Min, Max: max(min(x, Max), Min)
+    print(f"[<1] tach = {tach}, speed = {speed}")
+    # cap/bound tach
+    tach  = cap(tach, min_tach, max_tach)
+    # cap/bound speed
+    speed = cap(speed, min_speed, max_speed)
+    print(f"[=2] tach = {tach}, speed = {speed}")
+
+    if tach == max_tach:
+        tach  = cap(tach - eps, min_tach, max_tach)
+    if speed == max_speed:
+        speed = cap(speed - eps, min_speed, max_speed)
+    print(f"[>3] tach = {tach}, speed = {speed}")
+
+    return (tach, speed)
 
 def display_speed(screen, color, rect, s, font, size = 74, visible = True):
     font.origin = True
@@ -36,9 +60,6 @@ def draw_needle(screen, color, rect, radius, theta):
         end_y = cy - r * math.sin(theta)
 
         pygame.draw.line(screen, color, (cx, cy), (end_x, end_y), i+1)
-
-def draw_tach():
-    pass
 
 def draw_arc_text(screen, color, rect, font, input_len, input_start, increment, output_len, output_start):
     input_end = input_start + input_len
@@ -71,9 +92,6 @@ def draw_arc_lines(screen, color, rect, input_len, output_len, output_start, wid
 
         pygame.draw.line(screen, color, (start[0], start[1]), (end[0], end[1]), width)
 
-def draw_speedo():
-    pass
-
 def main():
     pygame.init()
     pygame.display.set_caption("RPM Clock")
@@ -87,6 +105,7 @@ def main():
 
     pygame.key.set_repeat(95)
 
+    # colors
     black   = (0, 0, 0)
     red     = (255, 0, 0)
     green   = (0, 215, 0)
@@ -99,6 +118,8 @@ def main():
     gray    = (240, 240, 240)
     white   = (255, 255, 255)
 
+    cap_strict = False
+
     square_len = int( min(width, height) * 0.6 )
     gauge_radius = square_len/2
     speed_rect = pygame.Rect(0, 0, square_len, square_len)
@@ -110,25 +131,33 @@ def main():
     left = width - ((width - gauge_width)/2)
     speed_rect.center = (left, height//2)
 
-    min_speed = 0
+    min_display_speed = 0
+    min_speed = min_display_speed
     max_speed = 59
+    max_display_speed = 60
+    speed_range = (min_speed, max_speed + 1)
+
     speed_len = max_speed - min_speed + 1
     speed = min_speed
     speed_pctg = lambda speed: (speed - min_speed) / speed_len
 
     min_display_tach = 0
     min_tach         = 1
-    max_display_tach = 12
-    max_tach         = max_display_tach
+    max_tach         = 12
+    max_display_tach = max_tach
+    tach_range = (min_tach, max_tach+1)
 
     tach_display_len = max_display_tach - min_display_tach + 1
     tach_len = max_tach - min_tach + 1
     tach = min_tach
     tach_pctg = lambda tach: (tach - min_display_tach) / tach_display_len
 
+    Mode = namedtuple("Mode", "enabled numb")
+    time_m = Mode(True, False)
     time_mode = True
     time_mode_numb = False
 
+    continuous_m = Mode(False, False)
     continuous_mode = False
     continuous_mode_numb = False
 
@@ -160,11 +189,9 @@ def main():
                 if event.key == pygame.K_c and continuous_mode_numb:
                     continuous_mode_numb = False
 
-        cap = lambda x, Min, Max: max(min(x, Max), Min)
-        # cap/bound speed
-        speed = cap(speed, min_speed, max_speed)
-        # cap/bound tach
-        tach  = cap(tach, min_tach, max_tach)
+        print(f"[1] tach = {tach}, speed = {speed}")
+        tach, speed = cap_gauges(tach, tach_range, speed, speed_range, cap_strict)
+        print(f"[2] tach = {tach}, speed = {speed}")
 
         if time_mode:
             now = dt.datetime.now()
@@ -186,6 +213,10 @@ def main():
             else:
                 tach = int(tach)
                 speed = int(speed)
+
+        print(f"[3] tach = {tach}, speed = {speed}")
+        tach, speed = cap_gauges(tach, tach_range, speed, speed_range, cap_strict)
+        print(f"[4] tach = {tach}, speed = {speed}")
         
         screen.fill( black )
 
@@ -219,20 +250,14 @@ def main():
         tach_text = \
             display_speed(screen, tach_color, tach_rect, str(int(tach)), font)
         if continuous_mode:
-            if time_mode:
-                # `now` only valid in this case
-                #sub_rpm = now.minute*60 + now.second + now.microsecond/1e6
-                #sub_rpm = int(sub_rpm * 1000 / 3600)
-                sub_rpm, _ = math.modf(tach)
-                sub_rpm = int(sub_rpm * 1000)
-                sub_rpm = f"{sub_rpm:03}"
-            else:
-                sub_rpm = "000"
+            sub_rpm, _ = math.modf(tach)
+            sub_rpm = int(sub_rpm * 1000)
+            sub_rpm = f"{sub_rpm:03}"
 
             cap_rgb = lambda v: min( max(v, 0), 255 )
             sub_tach_color = tuple( [cap_rgb(int(1.2*x)) for x in tach_color] )
 
-            sub_rpm_size = 28
+            sub_rpm_size = 32
             tach_text_rect = tach_text.get_rect()
             cont_tach_text_rect = \
                     display_speed(screen, sub_tach_color, tach_rect, \
