@@ -2,7 +2,7 @@
 
 import pygame
 import pygame.freetype
-from datetime import datetime
+import datetime as dt
 import math
 
 # need to know what time it is
@@ -16,12 +16,15 @@ import math
 # draw each subcomponent
 # done
 
-def display_speed(screen, color, rect, s, font):
+def display_speed(screen, color, rect, s, font, size = 74, visible = True):
     font.origin = True
-    text, text_rect = font.render(s, color, size=74)
+    text, text_rect = font.render(s, color, size = size)
     text_rect = text.get_rect(center = (rect.centerx, rect.centery))
     text_rect.top += rect.height * 0.34
-    screen.blit(text, text_rect)
+    if visible:
+        screen.blit(text, text_rect)
+
+    return text
 
 def draw_needle(screen, color, rect, radius, theta):
     N = 20
@@ -87,7 +90,7 @@ def main():
     black   = (0, 0, 0)
     red     = (255, 0, 0)
     green   = (0, 215, 0)
-    d_green = (0, 195, 0)
+    d_green = (0, 140, 0)
     l_blue  = (102, 178, 255)
     blue    = (0, 0, 255)
     pink    = (255, 51, 255)
@@ -125,13 +128,18 @@ def main():
     time_mode = True
     time_mode_numb = False
 
+    continuous_mode = False
+    continuous_mode_numb = False
+
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_j:
+                if event.key == pygame.K_q:
+                    running = False
+                elif event.key == pygame.K_j:
                     speed -= 1
                 elif event.key == pygame.K_k:
                     speed += 1
@@ -142,25 +150,42 @@ def main():
                 elif event.key == pygame.K_t and not time_mode_numb:
                     time_mode = not time_mode
                     time_mode_numb = True
+                elif event.key == pygame.K_c and not continuous_mode_numb:
+                    continuous_mode = not continuous_mode
+                    continuous_mode_numb = True
             elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_t:
-                    if time_mode_numb:
-                        time_mode_numb = False
+                if event.key == pygame.K_t and time_mode_numb:
+                    time_mode_numb = False
+                if event.key == pygame.K_c and continuous_mode_numb:
+                    continuous_mode_numb = False
 
-        if time_mode:
-            now = datetime.now()
-            tach = (now.hour % 12)
-            if tach % 12 == 0:
-                tach = 12
-
-            speed = now.minute
-        
         cap = lambda x, Min, Max: max(min(x, Max), Min)
         # cap/bound speed
         speed = cap(speed, min_speed, max_speed)
         # cap/bound tach
         tach  = cap(tach, min_tach, max_tach)
 
+        if time_mode:
+            now = dt.datetime.now()
+            tach = (now.hour % 12)
+            if tach % 12 == 0:
+                tach = 12
+
+            if continuous_mode:
+                tach += now.minute/60 + now.second/3600 + now.microsecond/3.6e9
+
+            speed = now.minute
+            if continuous_mode:
+                speed += now.second/60 + now.microsecond/3.6e9
+        else:
+            # tach and speed are already set, but
+            # adjust tach slightly based on speed
+            if continuous_mode:
+                tach = int(tach) + speed_pctg(speed)
+            else:
+                tach = int(tach)
+                speed = int(speed)
+        
         screen.fill( black )
 
         speed_radius = min(speed_rect.width, speed_rect.height) / 2
@@ -187,8 +212,37 @@ def main():
         draw_arc_lines(screen, blue, tach_rect, tach_display_len, tach_angle_len, tach_start, 6)
 
         draw_needle(screen, red, tach_rect, tach_radius, theta)
+
         tach_color = d_green if time_mode else pink
-        display_speed(screen, tach_color, tach_rect, str(tach), font)
+        tach_text = \
+            display_speed(screen, tach_color, tach_rect, str(int(tach)), font)
+        if continuous_mode:
+            if time_mode:
+                # `now` only valid in this case
+                #sub_rpm = now.minute*60 + now.second + now.microsecond/1e6
+                #sub_rpm = int(sub_rpm * 1000 / 3600)
+                sub_rpm, _ = math.modf(tach)
+                sub_rpm = int(sub_rpm * 1000)
+                sub_rpm = f"{sub_rpm:03}"
+            else:
+                sub_rpm = "000"
+
+            cap_rgb = lambda v: min( max(v, 0), 255 )
+            sub_tach_color = tuple( [cap_rgb(int(1.2*x)) for x in tach_color] )
+
+            sub_rpm_size = 28
+            tach_text_rect = tach_text.get_rect()
+            cont_tach_text_rect = \
+                    display_speed(screen, sub_tach_color, tach_rect, \
+                    sub_rpm, font, sub_rpm_size, False)
+            cont_tach_text_rect = cont_tach_text_rect.get_rect() 
+
+            x_offset = cont_tach_text_rect.width*2/3 + tach_text_rect.width/2
+            y_offset = abs(cont_tach_text_rect.height - tach_text_rect.height)/2
+            offset = (x_offset, y_offset)
+            cont_tach_rect = tach_rect.move( offset )
+
+            display_speed(screen, sub_tach_color, cont_tach_rect, sub_rpm, font, sub_rpm_size)
 
         ## draw clock
         # map 0 to 60 mph to 65% of the circle to 85% of the circle
@@ -208,7 +262,7 @@ def main():
 
         draw_needle(screen, red, speed_rect, speed_radius, theta)
         speed_color = green if time_mode else l_pink
-        display_speed(screen, speed_color, speed_rect, str(speed), font)
+        display_speed(screen, speed_color, speed_rect, str(int(speed)), font)
 
         # closing things
         pygame.display.update()
