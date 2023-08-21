@@ -176,7 +176,7 @@ def main():
 
             speed = now.minute
             if continuous_mode:
-                speed += now.second/60 + now.microsecond/3.6e9
+                speed += now.second/60 + now.microsecond/6e7
         else:
             # tach and speed are already set, but
             # adjust tach slightly based on speed
