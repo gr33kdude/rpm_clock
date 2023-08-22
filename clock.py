@@ -7,9 +7,6 @@ import pygame.freetype
 import datetime as dt
 import math
 
-# BUGS:
-# - cap_gauges doesn't quite work right with `eps` the way I want it
-
 # TODO:
 # - fuel gauge shows the battery percentage
 # - on hour transition, minute dial sweep anti-clockwise
@@ -19,24 +16,20 @@ import math
 # count every 10 seconds using 5 gears (2 sec each)
 
 def cap_gauges(tach, tach_range, speed, speed_range, strict = True):
-    eps = 1 if strict else sys.float_info.epsilon
+    # use seconds if strict, otherwise microseconds
+    eps = 1 if strict else 1/3.6e9
 
     min_tach,  max_tach  = tach_range
     min_speed, max_speed = speed_range
 
     cap = lambda x, Min, Max: max(min(x, Max), Min)
-    print(f"[<1] tach = {tach}, speed = {speed}")
-    # cap/bound tach
-    tach  = cap(tach, min_tach, max_tach)
-    # cap/bound speed
+    tach  = cap(tach,  min_tach,  max_tach)
     speed = cap(speed, min_speed, max_speed)
-    print(f"[=2] tach = {tach}, speed = {speed}")
 
-    if tach == max_tach:
+    if math.isclose(tach, max_tach):
         tach  = cap(tach - eps, min_tach, max_tach)
-    if speed == max_speed:
+    if math.isclose(speed, max_speed):
         speed = cap(speed - eps, min_speed, max_speed)
-    print(f"[>3] tach = {tach}, speed = {speed}")
 
     return (tach, speed)
 
@@ -189,9 +182,7 @@ def main():
                 if event.key == pygame.K_c and continuous_mode_numb:
                     continuous_mode_numb = False
 
-        print(f"[1] tach = {tach}, speed = {speed}")
         tach, speed = cap_gauges(tach, tach_range, speed, speed_range, cap_strict)
-        print(f"[2] tach = {tach}, speed = {speed}")
 
         if time_mode:
             now = dt.datetime.now()
@@ -214,9 +205,7 @@ def main():
                 tach = int(tach)
                 speed = int(speed)
 
-        print(f"[3] tach = {tach}, speed = {speed}")
         tach, speed = cap_gauges(tach, tach_range, speed, speed_range, cap_strict)
-        print(f"[4] tach = {tach}, speed = {speed}")
         
         screen.fill( black )
 
@@ -294,7 +283,7 @@ def main():
 
         # closing things
         pygame.display.update()
-        pygame.time.wait(10)
+        pygame.time.wait(50)
 
     pygame.freetype.quit()
 
