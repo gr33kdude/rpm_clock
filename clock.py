@@ -162,14 +162,22 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_q:
                     running = False
+                elif event.key == pygame.K_h:
+                    speed -= 5
                 elif event.key == pygame.K_j:
                     speed -= 1
                 elif event.key == pygame.K_k:
                     speed += 1
+                elif event.key == pygame.K_l:
+                    speed += 5
+                elif event.key == pygame.K_s:
+                    tach -= 5
                 elif event.key == pygame.K_d:
                     tach -= 1
                 elif event.key == pygame.K_f:
                     tach += 1
+                elif event.key == pygame.K_g:
+                    tach += 5
                 elif event.key == pygame.K_t and not time_mode_numb:
                     time_mode = not time_mode
                     time_mode_numb = True
