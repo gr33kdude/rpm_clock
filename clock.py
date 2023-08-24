@@ -15,6 +15,23 @@ import math
 # -- maybe count up the minute using revs?
 # count every 10 seconds using 5 gears (2 sec each)
 
+# Time to add a transition for the gauges
+# how do we do this in an extendable way?
+# 
+def debug_transmission(speeds):
+    for i in range(1, len(speeds)):
+        prev, cur = speeds[i-1:i+1]
+        diff = cur - prev
+        print(f"{prev} to {cur}: {diff}")
+
+def transmission():
+    num_gears = 6
+
+    speeds = [0, 15, 28, 39, 48, 55, 60]
+    #debug_transmission(speeds)
+
+    
+
 def cap_gauges(tach, tach_range, speed, speed_range, strict = True):
     # use seconds if strict, otherwise microseconds
     eps = 1 if strict else 1/3.6e9
@@ -86,6 +103,9 @@ def draw_arc_lines(screen, color, rect, input_len, output_len, output_start, wid
         pygame.draw.line(screen, color, (start[0], start[1]), (end[0], end[1]), width)
 
 def main():
+    transmission()
+    sys.exit(1)
+
     pygame.init()
     pygame.display.set_caption("RPM Clock")
 
