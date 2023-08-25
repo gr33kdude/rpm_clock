@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 
 from collections import namedtuple
-import sys
+import datetime as dt
+import random
 import pygame
 import pygame.freetype
-import datetime as dt
+import bisect
 import math
+import sys
+
+global last_gear
+last_gear = [0, None]
+
+def cap(x, Min, Max):
+    return max(min(x, Max), Min)
 
 # TODO:
 # - fuel gauge shows the battery percentage
@@ -24,13 +32,36 @@ def debug_transmission(speeds):
         diff = cur - prev
         print(f"{prev} to {cur}: {diff}")
 
-def transmission():
-    num_gears = 6
+def transmission(speed):
+    global last_gear
 
-    speeds = [0, 15, 28, 39, 48, 55, 60]
+#    speeds = [0, 15, 28, 39, 48, 55, 60]
+    speeds = [0, 7, 14, 21, 27, 34, 41, 50, 60]
+    num_gears = len(speeds) - 1
+
     #debug_transmission(speeds)
 
-    
+    # take an input, which is a distance from 0.0 to 1.0 (since anything can
+    # scale to that), we need to convert that into a (gear, speed), or (gear,
+    # rpm), or (rpm, speed). They should all be related.
+
+    gear = bisect.bisect(speeds, speed)
+    if last_gear[0] != gear:
+        last_gear[0] = gear
+        last_gear[1] = random.randint(10000, 11500)
+
+    max_display_rpm = last_gear[1]
+
+    gear_max_rpm = max_display_rpm / speeds[gear]
+    drag = 3 + (math.pow(num_gears - gear, 2) / num_gears**2)
+    rpm = math.pow(speed, drag) / math.pow(speeds[gear], drag) * \
+        max_display_rpm
+
+    rpm += 1000
+    jitter = int( 9 * gear / (num_gears - gear + 1))
+    rpm += random.randint(-jitter, jitter)
+
+    return rpm / 1000
 
 def cap_gauges(tach, tach_range, speed, speed_range, strict = True):
     # use seconds if strict, otherwise microseconds
@@ -103,9 +134,6 @@ def draw_arc_lines(screen, color, rect, input_len, output_len, output_start, wid
         pygame.draw.line(screen, color, (start[0], start[1]), (end[0], end[1]), width)
 
 def main():
-    transmission()
-    sys.exit(1)
-
     pygame.init()
     pygame.display.set_caption("RPM Clock")
 
@@ -174,6 +202,10 @@ def main():
     continuous_mode = False
     continuous_mode_numb = False
 
+    seconds_m = Mode(False, False)
+    seconds_mode = False
+    seconds_mode_numb = False
+
     running = True
     while running:
         for event in pygame.event.get():
@@ -198,6 +230,9 @@ def main():
                     tach += 1
                 elif event.key == pygame.K_g:
                     tach += 5
+                elif event.key == pygame.K_z and not seconds_mode_numb:
+                    seconds_mode = not seconds_mode
+                    seconds_mode_numb = True
                 elif event.key == pygame.K_t and not time_mode_numb:
                     time_mode = not time_mode
                     time_mode_numb = True
@@ -207,13 +242,15 @@ def main():
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_t and time_mode_numb:
                     time_mode_numb = False
-                if event.key == pygame.K_c and continuous_mode_numb:
+                elif event.key == pygame.K_c and continuous_mode_numb:
                     continuous_mode_numb = False
+                elif event.key == pygame.K_z and seconds_mode_numb:
+                    seconds_mode_numb = False
 
         tach, speed = cap_gauges(tach, tach_range, speed, speed_range, cap_strict)
 
+        now = dt.datetime.now()
         if time_mode:
-            now = dt.datetime.now()
             tach = (now.hour % 12)
             if tach % 12 == 0:
                 tach = 12
@@ -224,6 +261,9 @@ def main():
             speed = now.minute
             if continuous_mode:
                 speed += now.second/60 + now.microsecond/6e7
+        elif seconds_mode:
+            speed = now.second + now.microsecond/1e6
+            tach = transmission(speed)
         else:
             # tach and speed are already set, but
             # adjust tach slightly based on speed
