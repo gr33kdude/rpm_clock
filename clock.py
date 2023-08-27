@@ -2,6 +2,7 @@
 
 from collections import namedtuple
 import datetime as dt
+import numpy as np
 import random
 import pygame
 import pygame.freetype
@@ -23,6 +24,91 @@ def cap(x, Min, Max):
 # -- maybe count up the minute using revs?
 # count every 10 seconds using 5 gears (2 sec each)
 
+def generate_engine_params():
+    pass
+
+def linspace(start, end, n):
+    pass
+
+class Engine:
+    def __init__(self):
+        self.max_capable_rpm = 13000 + 1000
+        self.max_rpm = self.max_capable_rpm
+        self.min_rpm = 1000
+        #self.speeds = [0, 15, 28, 39, 48, 55, 60]
+        #self.speeds = [0, 7, 14, 21, 27, 34, 41, 50, 60]
+        self.speeds = np.linspace(0, 60, 10)
+        self.num_gears = len(self.speeds) - 1
+
+        self.steepness = 0.08
+        self.x_off = 30
+
+        self.min_off = 1/2
+        self.max_off = 13/16
+
+        self.max_jitter = 4 #self.num_gears
+
+    def jitter(self, speed):
+        gear = self.gear(speed)
+        denom = self.num_gears - gear + 1
+
+        return int(self.max_jitter * gear / denom)
+
+    def gear(self, speed):
+        return bisect.bisect(self.speeds, speed)
+
+    def set_max_rpm(self, rpm):
+        self.max_rpm = rpm
+
+    def rpm_range(self):
+        return self.max_rpm - self.min_rpm
+
+    def _base_rpm(self, speed):
+        return self.rpm_range() / \
+                (1 + math.exp(-self.steepness * (speed - self.x_off)))
+
+    def base_rpm(self, speed):
+        return self._base_rpm(speed) - self._base_rpm(0)
+
+    def speed_bounds(self, speed):
+        upper_bound_idx = bisect.bisect(self.speeds, speed)
+        lower_bound_idx = upper_bound_idx - 1
+
+        lb = self.speeds[lower_bound_idx]
+        ub = self.speeds[upper_bound_idx]
+
+        return (lb, ub)
+
+    def speed_range(self, speed):
+        lb, ub = self.speed_bounds(speed)
+        return ub - lb
+
+    def min_speed(self, speed):
+        min_speed_idx = bisect.bisect(self.speeds, speed) - 1
+        return self.speeds[min_speed_idx]
+
+    def offset(self, speed):
+        gear = self.gear(speed)+1
+        off = gear / self.num_gears
+
+        return self.min_off + (self.max_off - self.min_off) * off
+
+    def rpm(self, speed):
+        min_speed = self.min_speed(speed)
+        base_rpm = self.base_rpm(min_speed)
+        rpm_range = self.max_rpm - base_rpm
+
+        x_off = self.speed_range(speed) * self.offset(speed)
+
+        steepness_range = math.floor(speed / self.speed_range(speed))
+        steepness = 0.85 - 0.7 * (1.0 / self.num_gears * steepness_range)
+
+        exp_input = -steepness * (speed - min_speed - x_off)
+        return base_rpm + (rpm_range / (1 + math.exp(exp_input)))
+
+#for i in range(60):
+#    print(f"{i} = {base_rpm_fn(i)}")
+
 # Time to add a transition for the gauges
 # how do we do this in an extendable way?
 # 
@@ -32,12 +118,9 @@ def debug_transmission(speeds):
         diff = cur - prev
         print(f"{prev} to {cur}: {diff}")
 
+engine = Engine()
 def transmission(speed):
     global last_gear
-
-#    speeds = [0, 15, 28, 39, 48, 55, 60]
-    speeds = [0, 7, 14, 21, 27, 34, 41, 50, 60]
-    num_gears = len(speeds) - 1
 
     #debug_transmission(speeds)
 
@@ -45,21 +128,21 @@ def transmission(speed):
     # scale to that), we need to convert that into a (gear, speed), or (gear,
     # rpm), or (rpm, speed). They should all be related.
 
-    gear = bisect.bisect(speeds, speed)
+    gear = engine.gear(speed)
     if last_gear[0] != gear:
         last_gear[0] = gear
-        last_gear[1] = random.randint(10000, 11500)
+        Max = engine.max_capable_rpm
+        lb, ub = int(0.9 * Max), Max
+        last_gear[1] = random.randint(lb, ub)
 
     max_display_rpm = last_gear[1]
+    engine.set_max_rpm(max_display_rpm)
 
-    gear_max_rpm = max_display_rpm / speeds[gear]
-    drag = 3 + (math.pow(num_gears - gear, 2) / num_gears**2)
-    rpm = math.pow(speed, drag) / math.pow(speeds[gear], drag) * \
-        max_display_rpm
+    rpm = engine.rpm(speed)
 
-    rpm += 1000
-    jitter = int( 9 * gear / (num_gears - gear + 1))
-    rpm += random.randint(-jitter, jitter)
+    jitter = engine.jitter(speed)
+    rpm += np.random.normal(0, jitter)#random.randint(-jitter, jitter)
+    rpm += 500
 
     return rpm / 1000
 
@@ -206,6 +289,10 @@ def main():
     seconds_mode = False
     seconds_mode_numb = False
 
+    zero = 0.0
+    zero_mode = False
+    zero_numb = False
+
     running = True
     while running:
         for event in pygame.event.get():
@@ -230,6 +317,11 @@ def main():
                     tach += 1
                 elif event.key == pygame.K_g:
                     tach += 5
+                elif event.key in [pygame.K_KP0, pygame.K_0] and not zero_numb:
+                    zero_mode = True
+                    zero_numb = True
+                elif event.key == pygame.K_EQUALS:
+                    zero = 0.0
                 elif event.key == pygame.K_z and not seconds_mode_numb:
                     seconds_mode = not seconds_mode
                     seconds_mode_numb = True
@@ -246,10 +338,20 @@ def main():
                     continuous_mode_numb = False
                 elif event.key == pygame.K_z and seconds_mode_numb:
                     seconds_mode_numb = False
+                elif event.key in [pygame.K_KP0, pygame.K_0] and zero_numb:
+                    zero_numb = False
+                    zero_mode = False
 
-        tach, speed = cap_gauges(tach, tach_range, speed, speed_range, cap_strict)
+        tach, speed = \
+                cap_gauges(tach, tach_range, speed, speed_range, cap_strict)
 
         now = dt.datetime.now()
+
+        # handle time zero-ing
+        if zero_mode:
+            zero = now.second + now.microsecond/1e6
+            zero_mode = False
+
         if time_mode:
             tach = (now.hour % 12)
             if tach % 12 == 0:
@@ -263,6 +365,11 @@ def main():
                 speed += now.second/60 + now.microsecond/6e7
         elif seconds_mode:
             speed = now.second + now.microsecond/1e6
+            minute = 60.0
+            speed = minute + speed - zero
+            if speed > minute or math.isclose(speed, minute):
+                speed -= minute
+            speed = abs(speed)
             tach = transmission(speed)
         else:
             # tach and speed are already set, but
@@ -327,6 +434,13 @@ def main():
             cont_tach_rect = tach_rect.move( offset )
 
             display_speed(screen, sub_tach_color, cont_tach_rect, sub_rpm, font, sub_rpm_size)
+
+        # draw gear indicator
+        if seconds_mode:
+            tach_text_rect = tach_text.get_rect()
+            gear_rect = tach_rect.move( (0, -int(1.3 * tach_text_rect.height)) )
+            gear_str = str(engine.gear(speed))
+            display_speed(screen, blue, gear_rect, gear_str, font, 54)
 
         ## draw clock
         # map 0 to 60 mph to 65% of the circle to 85% of the circle
