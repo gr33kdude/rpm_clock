@@ -32,7 +32,8 @@ def linspace(start, end, n):
 
 class Engine:
     def __init__(self):
-        self.max_capable_rpm = 13000 + 1000
+        #self.max_capable_rpm = 13000 + 1000
+        self.max_capable_rpm = 12500
         self.max_rpm = self.max_capable_rpm
         self.min_rpm = 1000
         #self.speeds = [0, 15, 28, 39, 48, 55, 60]
@@ -93,7 +94,19 @@ class Engine:
 
         return self.min_off + (self.max_off - self.min_off) * off
 
-    def rpm(self, speed):
+    def decay(self, speed, m, M, millis):
+        t = millis / 1000
+        rpm_range = M - m
+        
+        base = m * t / rpm_range
+        rate = M * base
+        x_off = -base
+
+        #print(f"speed = {speed:.4f}, (m, M) = ({m:0.4f}, {M:0.4f}, base = {base:.4f}, rate = {rate:.4f}, x_off = {x_off:.4f}")
+
+        return rate / (speed - x_off)
+
+    def rpm_logistic(self, speed):
         min_speed = self.min_speed(speed)
         base_rpm = self.base_rpm(min_speed)
         rpm_range = self.max_rpm - base_rpm
@@ -105,6 +118,33 @@ class Engine:
 
         exp_input = -steepness * (speed - min_speed - x_off)
         return base_rpm + (rpm_range / (1 + math.exp(exp_input)))
+
+    def rpm_quadratic(self, speed):
+        min_speed = self.min_speed(speed)
+        base_rpm = self.base_rpm(min_speed)
+        rpm_range = self.max_rpm - base_rpm
+        speed_interval = self.speed_range(speed)
+
+        offset_factor = 0.1
+        max_speed_constant = math.pow((1+offset_factor)*speed_interval, 2)
+
+        inp = math.pow(speed - min_speed + offset_factor * speed_interval, 2)
+        return base_rpm + (rpm_range / max_speed_constant) * inp
+
+    def rpm(self, speed):
+        speed_diff = speed - self.min_speed(speed)
+        millis = 150
+        t = millis / 1000
+        gear_transition = speed_diff < t
+        if gear_transition:
+            min_speed = self.min_speed(speed)
+            M = self.rpm_logistic(min_speed - 0.001)
+            m = self.rpm_logistic(min_speed + t)
+            s = speed - min_speed
+            d = self.decay(s, m, M, millis)
+            return d
+        else:
+            return self.rpm_logistic(speed)
 
 #for i in range(60):
 #    print(f"{i} = {base_rpm_fn(i)}")
@@ -352,7 +392,15 @@ def main():
             zero = now.second + now.microsecond/1e6
             zero_mode = False
 
-        if time_mode:
+        if seconds_mode:
+            speed = now.second + now.microsecond/1e6
+            minute = 60.0
+            speed = minute + speed - zero
+            if speed > minute or math.isclose(speed, minute):
+                speed -= minute
+            speed = abs(speed)
+            tach = transmission(speed)
+        elif time_mode:
             tach = (now.hour % 12)
             if tach % 12 == 0:
                 tach = 12
@@ -363,14 +411,6 @@ def main():
             speed = now.minute
             if continuous_mode:
                 speed += now.second/60 + now.microsecond/6e7
-        elif seconds_mode:
-            speed = now.second + now.microsecond/1e6
-            minute = 60.0
-            speed = minute + speed - zero
-            if speed > minute or math.isclose(speed, minute):
-                speed -= minute
-            speed = abs(speed)
-            tach = transmission(speed)
         else:
             # tach and speed are already set, but
             # adjust tach slightly based on speed
