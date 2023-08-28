@@ -420,6 +420,12 @@ def main():
                 tach = int(tach)
                 speed = int(speed)
 
+        millis = 500
+        t = millis / 1000
+        if speed < t:
+            d = engine.decay(speed, t, 60, millis)
+            speed = d
+
         tach, speed = cap_gauges(tach, tach_range, speed, speed_range, cap_strict)
         
         screen.fill( black )
