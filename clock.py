@@ -505,7 +505,7 @@ def main():
 
         # closing things
         pygame.display.update()
-        pygame.time.wait(50)
+        pygame.time.wait(10)
 
     pygame.freetype.quit()
 
