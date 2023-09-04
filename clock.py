@@ -133,7 +133,7 @@ class Engine:
 
     def rpm(self, speed):
         speed_diff = speed - self.min_speed(speed)
-        millis = 150
+        millis = 350
         t = millis / 1000
         gear_transition = speed_diff < t
         if gear_transition:
@@ -179,6 +179,7 @@ def transmission(speed):
     engine.set_max_rpm(max_display_rpm)
 
     rpm = engine.rpm(speed)
+    print( f"speed = {speed:0.3f}, rpm = {rpm:0.3f}" )
 
     jitter = engine.jitter(speed)
     rpm += np.random.normal(0, jitter)#random.randint(-jitter, jitter)
@@ -515,5 +516,14 @@ def main():
 
     pygame.freetype.quit()
 
+def print_gauges(speed):
+    rpm = engine.rpm(speed)
+    print( f"speed = {speed:0.3f}, rpm = {rpm:0.3f}" )
+
 if __name__ == "__main__":
+    print_gauges(19.999)
+    print_gauges(20.000)
+    print_gauges(20.001)
+    print_gauges(20.002)
+
     main()
